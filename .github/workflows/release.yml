@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Check manifest version
+        run: |
+          MANIFEST_VERSION=$(python3 -c "import json; print(json.load(open('custom_components/evsemasterudp/manifest.json'))['version'])")
+          echo "manifest=${MANIFEST_VERSION} tag=${{ steps.ver.outputs.version }}"
+          if [ "$MANIFEST_VERSION" != "${{ steps.ver.outputs.version }}" ]; then
+            echo "::error::manifest.json version ($MANIFEST_VERSION) does not match tag (${{ steps.ver.outputs.version }})"
+            exit 1
+          fi
+
+      - name: Extract changelog section
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import os
+
+          version = os.environ["VERSION"]
+          lines = Path("CHANGELOG.md").read_text(encoding="utf-8").splitlines()
+          out: list[str] = []
+          capturing = False
+          for line in lines:
+              if line.startswith("## ["):
+                  if capturing:
+                      break
+                  if line.startswith(f"## [{version}]"):
+                      capturing = True
+                  continue
+              if capturing:
+                  out.append(line)
+          body = "\n".join(out).strip() or f"Release {version}"
+          Path("release_notes.md").write_text(body + "\n", encoding="utf-8")
+          print(body)
+          PY
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.ver.outputs.version }}
+          body_path: release_notes.md
+          fail_on_unmatched_files: false

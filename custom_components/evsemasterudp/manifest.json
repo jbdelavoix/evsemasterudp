@@ -1,14 +1,12 @@
 {
   "domain": "evsemasterudp",
   "name": "EVSE Master UDP",
-  "codeowners": ["@Oniric75"],
+  "codeowners": ["@jbdelavoix"],
   "config_flow": true,
-  "dependencies": [],
-  "documentation": "https://github.com/Oniric75/evsemasterudp",
-  "issue_tracker": "https://github.com/Oniric75/evsemasterudp/issues",
+  "documentation": "https://github.com/jbdelavoix/evsemasterudp",
   "integration_type": "hub",
-  "iot_class": "local_polling",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/jbdelavoix/evsemasterudp/issues",
   "requirements": [],
-  "version": "3.0.1",
-  "after_dependencies": []
+  "version": "3.1.0"
 }

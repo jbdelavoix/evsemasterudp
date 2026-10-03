@@ -171,15 +171,42 @@ class RequestLogin(Datagram):
 
 @register_datagram
 class LoginResponse(Datagram):
-    """0x0002 - Discovery response (EVSE → App)"""
+    """0x0002 - Login/discovery response (EVSE → App).
+
+    Real SQW49 wire payload matches Login (0x0001) structure.
+    """
     COMMAND = 0x0002
-    
+
+    def __init__(self):
+        super().__init__()
+        self.type = 0
+        self.brand = ""
+        self.model = ""
+        self.hardware_version = ""
+        self.max_power = 0
+        self.max_electricity = 0
+        self.hot_line = ""
+        self.p51 = 0
+        self.phases = 1
+        self.can_force_single_phase = False
+        self.feature = ""
+        self.support_new = False
+
     def pack_payload(self) -> bytes:
         return b''
-    
+
     def unpack_payload(self, buffer: bytes) -> None:
-    # Same structure as Login - broadcast/discovery response
-        pass
+        # Same layout as Login
+        if len(buffer) < 54:
+            return
+        self.type = buffer[0]
+        self.brand = read_string(buffer, 1, 16)
+        self.model = read_string(buffer, 17, 16)
+        self.hardware_version = read_string(buffer, 33, 16)
+        self.max_power = struct.unpack('>I', buffer[49:53])[0]
+        self.max_electricity = buffer[53]
+        if len(buffer) > 54:
+            self.hot_line = read_string(buffer, 54, 16)
 
 @register_datagram
 class LoginConfirm(Datagram):
@@ -278,12 +305,14 @@ class GetVersionResponse(Datagram):
         return b''
     
     def unpack_payload(self, buffer: bytes) -> None:
+        # SQW49 wire: hw(16) + sw(16) + feature(4) + support_new(1) = 37 bytes
         if len(buffer) >= 37:
             self.hardware_version = read_string(buffer, 0, 16)
-            self.software_version = read_string(buffer, 16, 32)
+            self.software_version = read_string(buffer, 16, 16)
             self.feature = struct.unpack('>I', buffer[32:36])[0]
             self.support_new = buffer[36]
-
+        elif len(buffer) >= 16:
+            self.hardware_version = read_string(buffer, 0, 16)
 # ============================================================================
 # COMMANDES DE CHARGE  
 # ============================================================================
@@ -677,62 +706,316 @@ class SetAndGetOutputElectricityResponse(Datagram):
 
 @register_datagram
 class SetAndGetSystemTime(Datagram):
-    """0x8101 (33025) - Définir/Obtenir heure système (App → EVSE)"""
+    """0x8101 (33025) - Set/Get system time (App → EVSE).
+
+    Payload (captured): ``action`` + big-endian timestamp + zero pad to 16 bytes.
+    ``action`` 1=SET, 2=GET. Timestamp is EmProto/China-shifted (see ``em_time``).
+    """
     COMMAND = 33025
-    
+
+    def __init__(self):
+        super().__init__()
+        self.action = 1  # 1=SET, 2=GET
+        self.timestamp = 0
+
     def pack_payload(self) -> bytes:
-    # Send current Unix timestamp
-        import time
-        timestamp = int(time.time())
-        return struct.pack('>I', timestamp)
-    
+        from .em_time import date_to_em_timestamp
+
+        if self.action == 1 and not self.timestamp:
+            self.timestamp = date_to_em_timestamp()
+        body = bytes([self.action & 0xFF]) + struct.pack(">I", int(self.timestamp) & 0xFFFFFFFF)
+        if len(body) < 16:
+            body = body + bytes(16 - len(body))
+        return body
+
     def unpack_payload(self, buffer: bytes) -> None:
-        pass
+        if not buffer:
+            return
+        self.action = buffer[0]
+        if len(buffer) >= 5:
+            self.timestamp = struct.unpack(">I", buffer[1:5])[0]
+
 
 @register_datagram
 class SetAndGetSystemTimeResponse(Datagram):
-    """0x0101 (257) - System time response (EVSE → App)"""
+    """0x0101 (257) - System time response (EVSE → App)."""
     COMMAND = 257
-    
+
     def __init__(self):
         super().__init__()
+        self.action = 0
         self.timestamp = 0
-    
+
     def pack_payload(self) -> bytes:
-        return b''  # App does not generate this message
-    
+        return b""
+
     def unpack_payload(self, buffer: bytes) -> None:
-        if len(buffer) >= 4:
-            self.timestamp = struct.unpack('>I', buffer[0:4])[0]
+        if not buffer:
+            return
+        # Capture: ``00`` + ts (5 bytes). Tolerate legacy 4-byte-only buffers.
+        if len(buffer) >= 5:
+            self.action = buffer[0]
+            self.timestamp = struct.unpack(">I", buffer[1:5])[0]
+        elif len(buffer) >= 4:
+            self.timestamp = struct.unpack(">I", buffer[0:4])[0]
 
 @register_datagram
 class SetAndGetOffLineCharge(Datagram):
-    """0x810d (33037) - Set/Get offline charge (App → EVSE)"""
+    """0x810d (33037) - Set/Get offline charge (App → EVSE)."""
     COMMAND = 33037
-    
+
     def __init__(self):
         super().__init__()
-        self.offline_enabled: bool = False
-    
+        self.action = 2  # 1=SET, 2=GET
+        self.status = 0  # 0=enabled, 1=disabled, 2=app_only
+
     def pack_payload(self) -> bytes:
-        return struct.pack('B', 1 if self.offline_enabled else 0)
-    
+        return bytes([self.action, 0 if self.action == 2 else self.status])
+
     def unpack_payload(self, buffer: bytes) -> None:
-        if len(buffer) >= 1:
-            self.offline_enabled = struct.unpack('B', buffer[0:1])[0] == 1
+        if len(buffer) >= 2:
+            self.action = buffer[0]
+            self.status = buffer[1]
+
 
 @register_datagram
 class SetAndGetOffLineChargeResponse(Datagram):
-    """0x010c (268) - Offline charge response (EVSE → App)"""
-    COMMAND = 268
-    
+    """0x010d (269) - Offline charge response (EVSE → App)."""
+    COMMAND = 269
+
     def __init__(self):
         super().__init__()
-        self.offline_enabled = False
-    
+        self.action = 0
+        self.status = 0
+
     def pack_payload(self) -> bytes:
-        return b''  # App does not generate this message
-    
+        return b''
+
     def unpack_payload(self, buffer: bytes) -> None:
-        if len(buffer) >= 1:
-            self.offline_enabled = struct.unpack('B', buffer[0:1])[0] == 1
+        if len(buffer) >= 2:
+            self.action = buffer[0]
+            self.status = buffer[1]
+
+
+@register_datagram
+class SetAndGetLanguage(Datagram):
+    """0x810f (33039) - Set/Get UI language (App → EVSE)."""
+    COMMAND = 33039
+
+    def __init__(self):
+        super().__init__()
+        self.action = 2  # 1=SET, 2=GET
+        self.language = 1
+
+    def pack_payload(self) -> bytes:
+        return bytes([self.action, 0 if self.action == 2 else self.language])
+
+    def unpack_payload(self, buffer: bytes) -> None:
+        if len(buffer) >= 2:
+            self.action = buffer[0]
+            self.language = buffer[1]
+
+
+@register_datagram
+class SetAndGetLanguageResponse(Datagram):
+    """0x010f (271) - Language response (EVSE → App)."""
+    COMMAND = 271
+
+    def __init__(self):
+        super().__init__()
+        self.action = 0
+        self.language = 0
+
+    def pack_payload(self) -> bytes:
+        return b''
+
+    def unpack_payload(self, buffer: bytes) -> None:
+        if len(buffer) >= 2:
+            self.action = buffer[0]
+            self.language = buffer[1]
+
+
+@register_datagram
+class SetAndGetTemperatureUnit(Datagram):
+    """0x8112 (33042) - Set/Get temperature unit (App → EVSE)."""
+    COMMAND = 33042
+
+    def __init__(self):
+        super().__init__()
+        self.action = 2  # 1=SET, 2=GET
+        self.temperature_unit = 1  # 1=C, 2=F
+
+    def pack_payload(self) -> bytes:
+        return bytes([self.action, 0 if self.action == 2 else self.temperature_unit])
+
+    def unpack_payload(self, buffer: bytes) -> None:
+        if len(buffer) >= 2:
+            self.action = buffer[0]
+            self.temperature_unit = buffer[1]
+
+
+@register_datagram
+class SetAndGetTemperatureUnitResponse(Datagram):
+    """0x0112 (274) - Temperature unit response (EVSE → App)."""
+    COMMAND = 274
+
+    def __init__(self):
+        super().__init__()
+        self.action = 0
+        self.temperature_unit = 1
+
+    def pack_payload(self) -> bytes:
+        return b''
+
+    def unpack_payload(self, buffer: bytes) -> None:
+        if len(buffer) >= 2:
+            self.action = buffer[0]
+            self.temperature_unit = buffer[1]
+
+
+@register_datagram
+class SetAndGetScreenBrightness(Datagram):
+    """0x8162 (33122) - Set/Get screen brightness (App → EVSE).
+
+    Captured from EVSEMaster iOS traffic: payload ``[0, action, value]`` with
+    action ``1``=GET-ish / ``2``=SET, value ``0..100``.
+    """
+    COMMAND = 33122
+
+    def __init__(self):
+        super().__init__()
+        self.action = 1  # 1=GET, 2=SET (brightness-specific)
+        self.brightness = 100
+
+    def pack_payload(self) -> bytes:
+        if self.action == 2:  # SET
+            return bytes([0x00, 0x02, int(self.brightness) & 0xFF])
+        # GET — matches live GET probes seen in capture
+        return bytes([0x00, 0x01, 0x00, 0x01, 0x00, 0x03])
+
+    def unpack_payload(self, buffer: bytes) -> None:
+        if len(buffer) >= 3 and buffer[0] == 0:
+            self.action = buffer[1]
+            self.brightness = buffer[2]
+        elif len(buffer) >= 2:
+            self.action = buffer[0]
+            self.brightness = buffer[1]
+
+
+@register_datagram
+class SetAndGetScreenBrightnessResponse(Datagram):
+    """0x0162 (354) - Screen brightness response (EVSE → App)."""
+    COMMAND = 354
+
+    def __init__(self):
+        super().__init__()
+        self.action = 0
+        self.brightness = 100
+
+    def pack_payload(self) -> bytes:
+        return b''
+
+    def unpack_payload(self, buffer: bytes) -> None:
+        # Capture: [0, action, brightness, ...]
+        if len(buffer) >= 3 and buffer[0] == 0:
+            self.action = buffer[1]
+            self.brightness = buffer[2]
+        elif len(buffer) >= 2:
+            self.action = buffer[0]
+            self.brightness = buffer[1]
+
+
+@register_datagram
+class SetAndGetNickName(Datagram):
+    """0x8108 (33032) - Set/Get nickname (App → EVSE)."""
+    COMMAND = 33032
+
+    def __init__(self):
+        super().__init__()
+        self.action = 2  # 1=SET, 2=GET
+        self.nick_name = ""
+
+    def pack_payload(self) -> bytes:
+        buf = bytearray(33)
+        buf[0] = self.action
+        if self.action == 1 and self.nick_name:
+            encoded = self.nick_name.encode("utf-8", errors="ignore")[:32]
+            buf[1 : 1 + len(encoded)] = encoded
+        return bytes(buf)
+
+    def unpack_payload(self, buffer: bytes) -> None:
+        if len(buffer) < 1:
+            return
+        self.action = buffer[0]
+        raw = buffer[1:33] if len(buffer) >= 33 else buffer[1:]
+        self.nick_name = raw.split(b"\x00", 1)[0].decode("utf-8", errors="ignore").strip()
+
+
+@register_datagram
+class SetAndGetNickNameResponse(Datagram):
+    """0x0108 (264) - Nickname response (EVSE → App)."""
+    COMMAND = 264
+
+    def __init__(self):
+        super().__init__()
+        self.action = 0
+        self.nick_name = ""
+
+    def pack_payload(self) -> bytes:
+        return b''
+
+    def unpack_payload(self, buffer: bytes) -> None:
+        if len(buffer) < 1:
+            return
+        self.action = buffer[0]
+        raw = buffer[1:33] if len(buffer) >= 33 else buffer[1:]
+        self.nick_name = raw.split(b"\x00", 1)[0].decode("utf-8", errors="ignore").strip()
+
+@register_datagram
+class SetAndGetChargeSchedule(Datagram):
+    """0x810e (33038) - Set/Get weekly charge schedule (App → EVSE).
+
+    Captured as AlarmChargeStrategy: action + 7×9-byte day slots
+    ``mode HH MM duration_be16 flags[4]`` (mode 1=off, 3=on).
+    """
+    COMMAND = 33038
+
+    def __init__(self):
+        super().__init__()
+        from .schedule import empty_schedule
+
+        self.action = 2  # 1=SET, 2=GET
+        self.slots = empty_schedule()
+
+    def pack_payload(self) -> bytes:
+        from .schedule import pack_schedule_payload
+
+        if self.action == 2:
+            return bytes([2]) + bytes(63)
+        return pack_schedule_payload(self.action, self.slots)
+
+    def unpack_payload(self, buffer: bytes) -> None:
+        from .schedule import unpack_schedule_payload
+
+        self.action, self.slots = unpack_schedule_payload(buffer)
+
+
+@register_datagram
+class SetAndGetChargeScheduleResponse(Datagram):
+    """0x010e (270) - Charge schedule response (EVSE → App)."""
+    COMMAND = 270
+
+    def __init__(self):
+        super().__init__()
+        from .schedule import empty_schedule
+
+        self.action = 0
+        self.slots = empty_schedule()
+
+    def pack_payload(self) -> bytes:
+        return b""
+
+    def unpack_payload(self, buffer: bytes) -> None:
+        from .schedule import unpack_schedule_payload
+
+        self.action, self.slots = unpack_schedule_payload(buffer)

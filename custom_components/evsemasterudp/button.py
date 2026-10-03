@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from . import DOMAIN
+from . import DOMAIN, evse_device_info
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -23,6 +23,7 @@ async def async_setup_entry(
     entities: list[ButtonEntity] = [
         EVSEStartChargeButton(coordinator, client, serial, base_name),
         EVSEStopChargeButton(coordinator, client, serial, base_name),
+        EVSESyncTimeButton(coordinator, client, serial, base_name),
     ]
     async_add_entities(entities)
 
@@ -33,12 +34,10 @@ class EVSEBaseButton(CoordinatorEntity, ButtonEntity):
         self.client = client
         self.serial = serial
         self.base_name = base_name
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, serial)},
-            "name": base_name,
-            "manufacturer": "Oniric75",
-            "model": "EVSE Master UDP",
-        }
+
+    @property
+    def device_info(self):
+        return evse_device_info(self.serial, self.base_name, self.evse_data)
 
     @property
     def evse_data(self):
@@ -85,3 +84,14 @@ class EVSEStopChargeButton(EVSEBaseButton):
     async def async_press(self) -> None:
         if await self.client.stop_charging(self.serial):
             await self.coordinator.async_request_refresh()
+
+
+class EVSESyncTimeButton(EVSEBaseButton):
+    def __init__(self, coordinator, client, serial: str, base_name: str):
+        super().__init__(coordinator, client, serial, base_name)
+        self._attr_name = f"{base_name} Sync Time"
+        self._attr_unique_id = f"{serial}_sync_time"
+        self._attr_icon = "mdi:clock-check"
+
+    async def async_press(self) -> None:
+        await self.client.sync_time(self.serial)

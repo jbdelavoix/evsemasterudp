@@ -1,0 +1,42 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Découvrir les bornes EVSE",
+        "description": "**Appuyez sur Valider pour lancer une recherche automatique** (~10 secondes sur le port UDP **28376**).\n\n**Avant de valider :**\n- Fermez l'application **EVSEMaster** (elle entre en conflit avec cette intégration)\n- La borne et Home Assistant doivent être sur le **même LAN / VLAN**\n- **Docker :** Home Assistant doit être sur le LAN — `network_mode: host` **ou** une IP LAN (macvlan/ipvlan, ex. `home-lan` + `ipv4_address`). Bridge / seul mapping du port 28376 ne suffit en général pas\n\nSi rien n'est trouvé, vous pourrez saisir le numéro de série manuellement à l'écran suivant.",
+        "data": {
+          "start_discovery": "Lancer la recherche automatique sur le réseau (~10 s)"
+        }
+      },
+      "select": {
+        "title": "Sélectionnez votre borne",
+        "description": "{count} borne(s) trouvée(s) sur le réseau. Sélectionnez-en une et saisissez le mot de passe de l'application EVSEMaster (défaut usine fréquent : **123456**).",
+        "data": {
+          "serial": "Borne",
+          "password": "Mot de passe (défaut 123456)",
+          "name": "Nom",
+          "port": "Port UDP"
+        }
+      },
+      "manual": {
+        "title": "Configuration manuelle",
+        "description": "Aucune nouvelle borne trouvée automatiquement (ou saisie manuelle choisie).\n\nEntrez le numéro de série et le mot de passe de l'application EVSEMaster (souvent **123456** par défaut). Cochez **Relancer la recherche** pour réessayer.\n\nSi la découverte reste vide : même LAN, app fermée, UDP 28376 ouvert, et pour Docker host networking ou IP LAN (macvlan).",
+        "data": {
+          "serial": "Numéro de série",
+          "password": "Mot de passe (défaut 123456)",
+          "name": "Nom",
+          "port": "Port UDP",
+          "rediscover": "Relancer la recherche sur le réseau"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Impossible de joindre la borne. Vérifiez l'alimentation, le même LAN, UDP 28376, et host networking / IP LAN Docker si besoin.",
+      "invalid_auth": "Mot de passe incorrect.",
+      "unknown": "Erreur inattendue."
+    },
+    "abort": {
+      "already_configured": "Cette borne est déjà configurée."
+    }
+  }
+}

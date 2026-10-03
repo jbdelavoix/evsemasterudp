@@ -1,0 +1,42 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "EVSE-Ladestationen suchen",
+        "description": "**Klicken Sie auf Senden, um eine automatische Suche zu starten** (~10 Sekunden auf UDP-Port **28376**).\n\n**Vor dem Senden:**\n- Schließen Sie die **EVSEMaster**-App (Konflikt mit dieser Integration)\n- Ladestation und Home Assistant müssen im **selben LAN / VLAN** sein\n- **Docker:** Home Assistant braucht LAN-Zugang — `network_mode: host` **oder** eine LAN-IP per macvlan/ipvlan (z. B. `home-lan` + `ipv4_address`). Bridge / nur Port 28376 reicht meist nicht\n\nWenn nichts gefunden wird, können Sie die Seriennummer auf dem nächsten Bildschirm manuell eingeben.",
+        "data": {
+          "start_discovery": "Automatische Netzwerksuche starten (~10 s)"
+        }
+      },
+      "select": {
+        "title": "EVSE auswählen",
+        "description": "{count} Ladestation(en) im Netzwerk gefunden. Wählen Sie eine aus und geben Sie das Passwort aus der EVSEMaster-App ein (häufiger Werksstandard: **123456**).",
+        "data": {
+          "serial": "Ladestation",
+          "password": "Passwort (Standard 123456)",
+          "name": "Name",
+          "port": "UDP-Port"
+        }
+      },
+      "manual": {
+        "title": "Manuelle Konfiguration",
+        "description": "Keine neue Ladestation automatisch gefunden (oder manuelle Eingabe gewählt).\n\nGeben Sie Seriennummer und Passwort aus der EVSEMaster-App ein (oft **123456** ab Werk). Aktivieren Sie **Erneut suchen**, um die Erkennung zu wiederholen.\n\nBleibt die Suche leer: gleiches LAN, App geschlossen, UDP 28376 offen, unter Docker Host-Networking oder LAN-IP (macvlan).",
+        "data": {
+          "serial": "Seriennummer",
+          "password": "Passwort (Standard 123456)",
+          "name": "Name",
+          "port": "UDP-Port",
+          "rediscover": "Erneut im Netzwerk suchen"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Ladestation nicht erreichbar. Prüfen Sie Strom, gleiches LAN, UDP 28376 und ggf. Docker-Host-Networking / LAN-IP.",
+      "invalid_auth": "Falsches Passwort.",
+      "unknown": "Unerwarteter Fehler."
+    },
+    "abort": {
+      "already_configured": "Diese Ladestation ist bereits konfiguriert."
+    }
+  }
+}

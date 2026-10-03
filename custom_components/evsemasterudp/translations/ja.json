@@ -1,0 +1,42 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "EVSE充電器を検出",
+        "description": "**送信を押すと自動検索を開始します**（UDPポート **28376** で約10秒）。\n\n**送信前に：**\n- **EVSEMaster** アプリを閉じてください（この統合と競合します）\n- 充電器とHome Assistantは**同じLAN / VLAN**である必要があります\n- **Docker：** Home AssistantはLAN上である必要があります — `network_mode: host` **または** macvlan/ipvlan のLAN IP（例: `home-lan` + `ipv4_address`）。ブリッジや28376のポート公開だけでは通常不十分です\n\n見つからない場合は、次の画面でシリアル番号を手動入力できます。",
+        "data": {
+          "start_discovery": "ネットワークの自動検索を開始（約10秒）"
+        }
+      },
+      "select": {
+        "title": "EVSEを選択",
+        "description": "ネットワーク上で{count}台の充電器が見つかりました。1台を選び、EVSEMasterアプリのパスワードを入力してください（工場出荷時は多くの場合 **123456**）。",
+        "data": {
+          "serial": "充電器",
+          "password": "パスワード（初期値 123456）",
+          "name": "名前",
+          "port": "UDPポート"
+        }
+      },
+      "manual": {
+        "title": "手動設定",
+        "description": "新しい充電器が自動検出されませんでした（または手動入力を選択しました）。\n\nEVSEMasterアプリのシリアル番号とパスワードを入力してください（初期値は多くの場合 **123456**）。**再検索**で検出を再試行できます。\n\n空のままの場合：同じLAN、アプリ終了、UDP 28376開放、Dockerでは host networking または LAN IP（macvlan）。",
+        "data": {
+          "serial": "シリアル番号",
+          "password": "パスワード（初期値 123456）",
+          "name": "名前",
+          "port": "UDPポート",
+          "rediscover": "ネットワークを再検索"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "充電器に接続できません。電源、同一LAN、UDP 28376、必要ならDockerのhost networking / LAN IPを確認してください。",
+      "invalid_auth": "パスワードが正しくありません。",
+      "unknown": "予期しないエラー。"
+    },
+    "abort": {
+      "already_configured": "この充電器は既に設定されています。"
+    }
+  }
+}

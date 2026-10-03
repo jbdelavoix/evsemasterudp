@@ -1,0 +1,42 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Discover EVSE chargers",
+        "description": "**Press Submit to start an automatic search** (~10 seconds on UDP port **28376**).\n\n**Before you press Submit:**\n- Close the **EVSEMaster** mobile app (it conflicts with this integration)\n- Charger and Home Assistant must be on the **same LAN / VLAN**\n- **Docker:** Home Assistant needs a real LAN presence — `network_mode: host` **or** a LAN IP via macvlan/ipvlan (e.g. `home-lan` + `ipv4_address`). Bridge / mapping only port 28376 is usually not enough\n\nIf nothing is found, you can enter the serial manually on the next screen.",
+        "data": {
+          "start_discovery": "Start automatic network search (~10 s)"
+        }
+      },
+      "select": {
+        "title": "Select your EVSE",
+        "description": "{count} charger(s) found on the network. Select one and enter the password from the EVSEMaster app (factory default on many chargers: **123456**).",
+        "data": {
+          "serial": "Charger",
+          "password": "Password (default 123456)",
+          "name": "Name",
+          "port": "UDP port"
+        }
+      },
+      "manual": {
+        "title": "Manual configuration",
+        "description": "No new charger found automatically (or manual entry chosen).\n\nEnter the serial number and password from the EVSEMaster app (often **123456** by default). Enable **Search again** to retry discovery.\n\nIf discovery stays empty: same LAN, app closed, UDP 28376 open, and for Docker use host networking or a LAN IP (macvlan).",
+        "data": {
+          "serial": "Serial number",
+          "password": "Password (default 123456)",
+          "name": "Name",
+          "port": "UDP port",
+          "rediscover": "Search again on the network"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to reach the charger. Check power, same LAN, UDP 28376, and Docker host networking / LAN IP if applicable.",
+      "invalid_auth": "Incorrect password.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This charger is already configured."
+    }
+  }
+}

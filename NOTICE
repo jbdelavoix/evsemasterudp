@@ -11,5 +11,6 @@ structure.
 Attributions:
 - Original EmProto reverse engineering: johnwoo-nl (MIT licensed)
 - Python integration design & implementation: Oniric75 (2024-2025)
+- Protocol validation on live hardware, discovery & state-mapping improvements: jbdelavoix (https://github.com/jbdelavoix) (2026)
 
 This file is provided for clarity of provenance. See LICENSE for licensing terms.

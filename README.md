@@ -1,173 +1,308 @@
-# EVSE Master UDP - Home Assistant Integration
-
-> **🙏 ACKNOWLEDGMENT / REMERCIEMENTS**
-> 
-> This project is based on the excellent work of [johnwoo-nl/emproto](https://github.com/johnwoo-nl/emproto). Without their invaluable reverse-engineering of the EVSE Master UDP protocol, this Home Assistant integration would not have been possible. Full credit and thanks to the original author! 🌟
-> 
-> Ce projet est basé sur l'excellent travail de [johnwoo-nl/emproto](https://github.com/johnwoo-nl/emproto). Sans leur précieux reverse-engineering du protocole UDP EVSE Master, cette intégration Home Assistant n'aurait pas été possible. Tout le crédit et nos remerciements à l'auteur original ! 🌟
-
----
-
-> **🚨 DISCLAIMER / AVERTISSEMENT LÉGAL**
-> 
-> **English:** This integration is provided "as is". Installing, configuring, or using it is entirely at your own risk. The author(s) accept no liability for any damage, malfunction, warranty loss, fire, injury, or other consequences resulting from its use. Always confirm that your charging station operates safely and complies with local regulations before use.
-> 
-> **Français :** Cette intégration est fournie "en l'état". Son installation, sa configuration ou son utilisation se font entièrement à vos risques et périls. L'auteur(e) décline toute responsabilité en cas de dommages, dysfonctionnements, perte de garantie, incendie, blessure ou toute autre conséquence liée à son utilisation. Vérifiez toujours que votre borne fonctionne en toute sécurité et respecte la réglementation locale avant usage.
-
----
-
-> **⚠️ SAFETY WARNINGS / AVERTISSEMENTS IMPORTANTS**
-> 
-> **English:**
-> - Repeated charge starts can prematurely wear your station's contactors; even with safeguards enabled, you assume full responsibility for any damage.
-> - Never run the "EVSE Master" mobile app at the same time as this integration; simultaneous use will cause connection conflicts and may crash both systems.
-> 
-> **Français :**
-> - Les démarrages répétés de charge peuvent user prématurément les contacteurs de la borne ; même avec les protections activées, vous assumez l'entière responsabilité des dommages éventuels.
-> - N'utilisez jamais l'application mobile « EVSE Master » en parallèle de cette intégration ; l'utilisation simultanée provoque des conflits de connexion et peut faire planter les deux systèmes.
-
----
-
-> **🗂️ Unified bilingual sections below / Sections bilingues unifiées ci-dessous.**
-
----
-
-## 📋 Table of Contents / Table des Matières
-- [🔌 Overview / Vue d'ensemble](#-overview--vue-densemble)
-- [⚠️ Important Warnings / Avertissements](#️-important-warnings--avertissements)
-- [🏗️ Compatibility / Compatibilité](#️-compatibility--compatibilité)
-- [🚀 Installation](#-installation)
-  - [HACS](#hacs)
-  - [Manual / Manuelle](#manual--manuelle)
-- [⚙️ Configuration](#️-configuration)
- - [📊 Device Overview / Vue Appareil](#-device-overview--vue-appareil)
-- [🛠️ Features / Fonctionnalités](#️-features--fonctionnalités)
-- [🔧 Advanced Configuration / Configuration Avancée](#-advanced-configuration--configuration-avancée)
-- [� Automation Examples / Exemples d'automatisations](#-automation-examples--exemples-dautomatisations)
-- [🐛 Troubleshooting / Résolution de problèmes](#-troubleshooting--résolution-de-problèmes)
-- [🆘 Support](#-support)
-- [📄 License / Licence](#-license--licence)
-
----
-
-## 🔌 Overview / Vue d'ensemble
-
-**EN:** Home Assistant integration for EVSE Master UDP compatible charging stations. Control & monitor your EVSE via the UDP protocol used by the mobile app.
-
-**FR:** Intégration Home Assistant pour bornes compatibles EVSE Master UDP. Contrôle et supervision via le protocole UDP utilisé par l'application mobile.
-
-## ⚠️ Important Warnings / Avertissements
-
-**EN – Built‑in protections:**
-- Rapid change protection (≥5 min between start/stop)
-- 16A safety fallback on error
-- Minimum delay between cycles
-
-**FR – Protections intégrées :**
-- Protection changements rapides (≥5 min entre démarrage/arrêt)
-- Fallback sécurité 16A en cas d'erreur
-- Délai minimum entre cycles
-
-**EN – Recommendations:** Avoid frequent short cycles; plan automations; monitor hardware; disable integration before using the mobile app.
-
-**FR – Recommandations :** Évitez les cycles courts répétés; planifiez vos automatisations; surveillez le matériel; désactivez l'intégration avant d'utiliser l'application mobile.
-
-## 🏗️ Compatibility / Compatibilité
-
-**EN:** Tested: Morec; generic EVSE using UDP 28376; some Chinese stations via EVSE Master.
-
-**FR :** Testé : Morec ; bornes EVSE génériques UDP 28376 ; certaines bornes chinoises via EVSE Master.
-
-## 🚀 Installation
-
-### HACS
-**EN:** This is the recommended method because updates are tracked automatically. In Home Assistant open HACS, go to Integrations, then use the three‑dot menu to open Custom repositories. Paste the repository URL `https://github.com/Oniric75/evsemasterudp` and select type "Integration". After adding it, search for "EVSE Master UDP" inside HACS, click install, then restart Home Assistant to load the component.
-
-**FR :** Méthode recommandée car les mises à jour sont suivies automatiquement. Dans Home Assistant ouvrez HACS, allez dans Intégrations puis utilisez le menu (trois points) pour ajouter un Dépôt personnalisé. Collez l'URL `https://github.com/Oniric75/evsemasterudp` et choisissez le type « Integration ». Ensuite recherchez « EVSE Master UDP » dans HACS, installez, puis redémarrez Home Assistant pour charger le composant.
-
-### Manual / Manuelle
-**EN:** Use this only if you do not use HACS. Download the latest release archive from GitHub, extract it, and copy the folder `evsemasterudp` (the one that contains `manifest.json`) into your Home Assistant `custom_components/` directory. Ensure the final path is `custom_components/evsemasterudp/`. Restart Home Assistant and the integration should appear in the Add Integration dialog.
-
-**FR :** À utiliser seulement si vous n'utilisez pas HACS. Téléchargez l'archive de la dernière release sur GitHub, extrayez‑la puis copiez le dossier `evsemasterudp` (celui contenant `manifest.json`) dans votre répertoire `custom_components/` de Home Assistant. Vérifiez que le chemin final est `custom_components/evsemasterudp/`. Redémarrez Home Assistant et l'intégration apparaîtra dans la boîte de dialogue « Ajouter une intégration ».
-
-## ⚙️ Configuration
-
-**EN:** During setup you only provide: (1) the EVSE serial number and (2) the password you configured in the official mobile app (plus optional port, default 28376, and name). There is currently no user‑exposed setting for update interval or network timeout; the integration internally refreshes every 60 seconds. Fast‑change protection delay is managed by the numeric entity (see Entities section) rather than in the config flow.
-
-**FR :** Lors de la configuration vous fournissez uniquement : (1) le numéro de série de la borne et (2) le mot de passe défini dans l'application officielle (ainsi que le port optionnel, défaut 28376, et un nom). Il n'existe pas pour l'instant de paramètre utilisateur pour l'intervalle de mise à jour ou le timeout réseau ; l'intégration effectue un rafraîchissement interne toutes les 60 secondes. Le délai de protection contre les changements rapides est géré par l'entité numérique (voir section Entités) et non dans le flux de configuration.
-
-**EN – Fields:**
-- Serial: Used to locate and authenticate the charger.
-- Password: Required for login (plain text in config entry storage).
-- Port: UDP port (keep default unless your device differs).
-- Name: Friendly label for entities.
-
-**FR – Champs :**
-- Numéro de série : Sert à localiser et authentifier la borne.
-- Mot de passe : Requis pour la connexion (stocké en clair dans l'entrée HA).
-- Port : Port UDP (laisser la valeur par défaut sauf cas particulier).
-- Nom : Libellé convivial pour les entités (défaut: EVSEMaster).
-
-## 📊 Device Overview / Vue Appareil
-
 <p align="center">
-  <img src="img/ha_device_panel.png" alt="Home Assistant device view of EVSE Master UDP integration" width="780" />
+  <img src="https://raw.githubusercontent.com/jbdelavoix/evsemasterudp/main/custom_components/evsemasterudp/brand/logo.png" alt="EVSE Master UDP" width="420" />
 </p>
 
-**EN:** Example of the device page in Home Assistant showing key sensors, charge control buttons, and the charge status with cooldown indicator.
+# EVSE Master UDP
 
-**FR :** Exemple de la page appareil dans Home Assistant affichant les capteurs principaux, les boutons de contrôle de charge et le statut de charge avec indicateur de protection.
+Home Assistant custom integration for EV chargers that speak the **EVSE Master UDP** protocol (port **28376**).
 
-> The exact entity names may vary depending on the friendly name you chose during setup. / Les noms d'entités peuvent varier selon le nom choisi lors de la configuration.
+Based on the protocol reverse-engineering from [johnwoo-nl/emproto](https://github.com/johnwoo-nl/emproto).
 
-### Implemented Entities (Summary) / Entités Implémentées (Résumé)
-- State, power, current, voltage, energy, temperatures
-- Charge status (with soft protection + cooldown_remaining_s)
-- Start / Stop charge buttons
-- Rapid change protection number (minutes)
+## Disclaimer
 
-### À venir / Planned
-- Additional configuration parameters (offline charge, fees) – not yet ported.
+This integration is provided **as is**. You use it at your own risk. The authors accept no liability for damage, malfunction, warranty loss, fire, injury, or any other consequence. Confirm that your station is safe and compliant with local regulations before use.
 
----
+## Safety
 
-- Auto discovery / Découverte automatique
-- Secure password auth / Authentification sécurisée
-- Real-time status / Statut temps réel
-- Charge control / Contrôle de charge
-- Parameter configuration / Paramètres configurables
-- Session history / Historique de session
-- Protections intégrées
+- Repeated start/stop cycles can wear contactors. Built-in cooldown helps but does not remove your responsibility.
+- **Do not** run the official **EVSEMaster** mobile app at the same time as this integration — both fight for the same UDP session and will conflict.
 
-## 🔧 Advanced Configuration / Configuration Avancée
+## Compatibility
 
-**EN:** Update freq 15–300s (default 30), timeout 5–30s (default 10), rapid change protection on, 5‑min cycle delay.
+Supports chargers that use the official **EVSEMaster** app over UDP, including among others:
 
-**FR :** Fréquence 15–300s (défaut 30), timeout 5–30s (défaut 10), protection active, délai 5 min.
+- **Morec** wallboxes
+- Other brands / OEM Chinese stations that pair with EVSEMaster (validated e.g. on **SQW49**)
 
-## 📚 Automation Examples / Exemples d'automatisations
+Official app:
 
-### EN: Off‑peak charging / FR : Charge heures creuses
+- [EVSEMaster on the App Store (iOS)](https://apps.apple.com/app/evsemaster/id1474532183)
+- [EVSEMaster on Google Play (Android)](https://play.google.com/store/apps/details?id=com.evsemaster.dev)
+
+If your charger works with EVSEMaster on the LAN, this integration is likely compatible. Default UDP port: **28376**.
+
+## Requirements
+
+- Home Assistant **2024.1+** (HACS recommended). Brand icons in the UI need **2026.3+** (local `brand/` folder).
+- Charger and Home Assistant on the **same LAN / VLAN** (no client isolation / guest Wi‑Fi)
+- **UDP broadcast and unicast** on port **28376** must reach the Home Assistant host
+
+### Home Assistant in Docker
+
+**Important:** discovery and live status depend on **UDP broadcasts** on port **28376**.  
+A default Docker **bridge** network usually **cannot** receive them — **Add integration → autodiscovery will find nothing**.
+
+Home Assistant must sit on the **same L2 LAN** as the charger. Two setups that work:
+
+#### Option A — host networking (simplest)
+
+```yaml
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    network_mode: host
+    volumes:
+      - ./homeassistant:/config
+    environment:
+      - TZ=Europe/Paris
+    restart: unless-stopped
+    # Do NOT also publish 28376/udp via ports: with host networking
+```
+
+#### Option B — dedicated LAN IP (macvlan / ipvlan / “home-lan”)
+
+Give the container its **own address on the home LAN** (same subnet as the charger), for example:
+
+```yaml
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    volumes:
+      - ./homeassistant:/config
+    environment:
+      - TZ=Europe/Paris
+    restart: unless-stopped
+    networks:
+      portals:
+      services:
+      home-lan:
+        ipv4_address: 192.168.1.10   # pick a free IP on the charger’s LAN
+
+networks:
+  portals:
+    # ...
+  services:
+    # ...
+  home-lan:
+    # macvlan/ipvlan (or equivalent) bridged to your LAN NIC
+    # driver: macvlan
+    # driver_opts:
+    #   parent: eth0
+    # ipam:
+    #   config:
+    #     - subnet: 192.168.1.0/24
+    #       gateway: 192.168.1.1
+```
+
+The important part is **`home-lan` + a real LAN `ipv4_address`**: HA must receive broadcasts as a peer on that subnet (same subnet as the charger). Extra compose networks (`portals`, `services`, …) are fine alongside it.
+
+**What does not work well:**
+
+| Setup | Result |
+|-------|--------|
+| `network_mode: host` (Linux) | Discovery + status OK |
+| Container IP on the **home LAN** (macvlan / ipvlan / similar) | Discovery + status OK |
+| Bridge + `ports: ["28376:28376/udp"]` only | Often **fails** (broadcasts not forwarded) |
+| Docker Desktop **macOS / Windows** | No real LAN host networking → prefer Linux host or a VM with bridged NIC |
+| Guest Wi‑Fi / client isolation / different VLAN | Broadcasts blocked → no discovery |
+
+Also allow **UDP 28376** inbound/outbound on the host firewall.
+
+## Installation
+
+### HACS (recommended)
+
+1. HACS → Integrations → Custom repositories  
+2. URL: `https://github.com/jbdelavoix/evsemasterudp` — type **Integration**  
+3. Install **EVSE Master UDP**  
+4. Restart Home Assistant  
+
+### Manual
+
+Copy `custom_components/evsemasterudp/` into your Home Assistant `config/custom_components/` so that `manifest.json` is at:
+
+`config/custom_components/evsemasterudp/manifest.json`
+
+Restart Home Assistant.
+
+## Find your serial (and IP) before setup
+
+You do **not** need to guess the IP. The charger announces itself on UDP **28376**. Use the scripts from a machine on the **same network** as the charger (close the EVSEMaster app first).
+
+```bash
+# From the repository root
+python tests/test_discovery.py
+# Optional longer wait:
+python tests/test_discovery.py --timeout 60
+```
+
+Example output:
+
+```text
+IP        : 192.168.1.50
+Port      : 39576
+Serial    : 8662888793459659
+Brand     : EVSE
+Model     : SQW49
+```
+
+Copy the **Serial** value for Home Assistant (or rely on in-UI autodiscovery).
+
+Full login + live status + JSONL packet dump (password = EVSEMaster app; many chargers ship with **`123456`**):
+
+```bash
+EVSE_PASSWORD='123456' python tests/test_full.py --listen 45
+# Or interactive password prompt:
+python tests/test_full.py --listen 45
+```
+
+Captures are written under `tests/captures/`.
+
+| Script | Purpose |
+|--------|---------|
+| `tests/test_unit.py` | Fast offline unit tests (protocol pack/unpack, no HA / no hardware) |
+| `tests/test_config.py` | Live GET/SET brightness, temp, start mode, language, schedule… (no HA) |
+| `tests/test_discovery.py` | Listen for broadcasts → print **serial** and **IP** |
+| `tests/test_full.py` | Discover, authenticate, dump status / wire hex |
+| `tests/test_basic.py` | Offline smoke tests (imports / socket) |
+
+```bash
+python tests/test_unit.py
+# Live config (close EVSEMaster app first; reopen app to verify):
+EVSE_PASSWORD='123456' python tests/test_config.py --brightness 40
+EVSE_PASSWORD='123456' python tests/test_config.py --temp F --start-mode auto
+EVSE_PASSWORD='123456' python tests/test_config.py --schedule all=03:00/60
+EVSE_PASSWORD='123456' python tests/test_config.py --schedule mon=01:00/30,tue=off
+EVSE_PASSWORD='123456' python tests/test_config.py --schedule-clear
+```
+
+
+## Configuration in Home Assistant
+
+1. **Settings → Devices & services → Add integration → EVSE Master UDP**
+2. A first screen explains the prerequisites and asks you to **press Submit / Valider** to start **autodiscovery** (~10 s on UDP **28376**).
+3. Select your charger from the list (or choose manual serial entry / « Search again »).
+4. Enter the **password** from the EVSEMaster app (factory default on many chargers: **`123456`**).
+5. Optional: friendly name, UDP port (default `28376`).
+
+Close the EVSEMaster mobile app first — it conflicts with the same UDP session.
+
+If the list is empty: same LAN/VLAN as the charger, UDP 28376 open, and for Docker use **host networking** or a **LAN IP** (macvlan / `home-lan`) — see above.
+
+| Field | Description |
+|-------|-------------|
+| Serial | Device serial (from discovery list or manual entry) |
+| Password | App password (often factory default **`123456`**; stored in the config entry) |
+| Port | UDP listen port (default `28376`) |
+| Name | Friendly name for entities |
+
+Entities refresh from UDP events with a **2 s** coordinator fallback. Fast-change protection (minutes between stop→start) is a number entity, not a config-flow option.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/jbdelavoix/evsemasterudp/main/img/ha_device_panel.jpg" alt="Home Assistant device view" width="780" />
+</p>
+
+## Entities
+
+Names below use the friendly name chosen at setup (default **EVSEMaster**). Entity IDs follow Home Assistant slug rules (e.g. `sensor.evsemaster_power`).
+
+### Sensors
+
+| Entity | Unit | Notes |
+|--------|------|--------|
+| State | — | Meta state: `IDLE`, `PLUGGED_IN`, `CHARGING`, `ERROR`, `EMERGENCY`, `OFFLINE`, … |
+| Charge Status | — | `charging` / `not_charging` / `soft_protection` (+ cooldown attribute) |
+| Power | W | Instantaneous power |
+| Current | A | Phase L1 (primary) |
+| Current L2 / L3 | A | Disabled by default on 1-phase chargers |
+| Voltage | V | Phase L1 (primary) |
+| Voltage L2 / L3 | V | Disabled by default on 1-phase chargers |
+| Energy | kWh | Lifetime counter (`total_increasing`) |
+| Session Energy | kWh | Energy for the current / last session |
+| Session Duration | s | Session duration |
+| Temperature Inner | °C | Internal temperature |
+| Temperature Outer | °C | External / plug area temperature |
+| Gun State | — | `available` / `plugged` / `plugged_locked` / … |
+| Current State | — | Protocol state: `standby` / `charging` / `stopped_by_evse` / `stopped_by_ev` / … |
+
+### Binary sensors
+
+| Entity | On when |
+|--------|---------|
+| Vehicle Connected | Cable plugged into the vehicle (`gun_state` ≥ 2, or charging signals) |
+| Charging | Delivering power (`output_state == 1` or power > 10 W) |
+| Error | Fault codes reported by the charger |
+| Emergency | Emergency stop active (mapped from `emergency_btn_state`) |
+
+### Buttons
+
+| Entity | Action |
+|--------|--------|
+| Start Charge | Start charging (respects fast-change cooldown) |
+| Stop Charge | Stop charging |
+| Sync Time | Push Home Assistant / host time to the charger |
+
+### Numbers
+
+| Entity | Unit | Notes |
+|--------|------|--------|
+| Max Current | A | Configurable charge current limit (6 A … charger max) |
+| Screen Brightness | % | Display brightness `0–100` (protocol `0x8162`) |
+| Fast Change Protection | min | Cooldown after a stop before the next start is allowed (`0` = off) |
+| Schedule *Day* Duration | min | Weekly window length (`0` = off, up to `1439` = 23h59). Protocol `0x810e` |
+
+### Times
+
+| Entity | Notes |
+|--------|--------|
+| Schedule *Day* Start | Weekly charge window start (Mon–Sun). Empty / unavailable when the day slot is off |
+
+### Selects
+
+| Entity | Options |
+|--------|---------|
+| Language | `english` / `italian` / `german` / `french` / `spanish` / `hebrew` |
+| Temperature Unit | `C` / `F` |
+| Start Mode | `app&button` / `app` / `auto` |
+
+### Text
+
+| Entity | Notes |
+|--------|--------|
+| Nickname | Charger display / app name (max 32 chars) |
+
+## Features
+
+- UDP autodiscovery in the config flow (plus manual serial entry)
+- Password authentication (factory default often `123456`)
+- Live status over UDP with short coordinator fallback
+- Session stop reason labels where the charger reports them
+
+## Automation examples
+
+### Off-peak start
+
 ```yaml
 automation:
-  - alias: "EVSE charge off-peak / heures creuses"
+  - alias: "EVSE charge off-peak"
     trigger:
       - platform: time
         at: "22:30:00"
     condition:
       - condition: state
-        entity_id: binary_sensor.vehicle_connected
+        entity_id: binary_sensor.evsemaster_vehicle_connected
         state: "on"
     action:
       - service: button.press
         target:
-          entity_id: button.evsemaster_demarrer_charge
+          entity_id: button.evsemaster_start_charge
 ```
 
-### EN: Stop at 80% / FR : Arrêt à 80%
+### Stop from vehicle SoC
+
 ```yaml
 automation:
-  - alias: "Stop/Arrêt charge 80%"
+  - alias: "Stop charge at 80%"
     trigger:
       - platform: numeric_state
         entity_id: sensor.vehicle_battery_level
@@ -175,188 +310,87 @@ automation:
     action:
       - service: button.press
         target:
-          entity_id: button.evsemaster_arreter_charge
+          entity_id: button.evsemaster_stop_charge
 ```
 
-## 🐛 Troubleshooting / Résolution de problèmes
+Entity IDs depend on the friendly name chosen at setup.
 
-**EN:** Not detected → power on, same network, firewall port 28376. Auth failed → check password & serial. Connection lost → network stability, adjust interval, conflicts.
+## Troubleshooting
 
-**FR :** Non détectée → alimentation, même réseau, port 28376. Auth échouée → mot de passe & numéro de série. Perte connexion → stabilité réseau, intervalle, conflits.
+| Symptom | What to check |
+|---------|----------------|
+| No discovery / empty list on Add integration | Same LAN as the charger; EVSEMaster app closed; UDP 28376 open; **Docker: host networking or LAN IP (macvlan)** — bridge/`ports:` alone is not enough |
+| Auth failed | Password from EVSEMaster app (try factory default **`123456`**); serial matches discovery |
+| Works then drops | App opened in parallel; Wi‑Fi isolation; host firewall |
+| Entities stuck | Reload integration; confirm broadcasts with `tests/test_discovery.py` |
 
-## 🆘 Support
+## Protocol
 
-- Issues / Bugs: https://github.com/Oniric75/evsemasterudp/issues
-- Discussions: https://github.com/Oniric75/evsemasterudp/discussions
-- Wiki: https://github.com/Oniric75/evsemasterudp/wiki
+UDP framing, commands, config, schedule and time sync notes:
 
-## 📄 License / Licence
+- **[doc/protocol.md](doc/protocol.md)** — EmProto / EVSE Master UDP spec (from captures + [emproto](https://github.com/johnwoo-nl/emproto))
 
-MIT License – see `LICENSE`.
+## Support
+
+- Issues: https://github.com/jbdelavoix/evsemasterudp/issues  
+- Changelog: [CHANGELOG.md](CHANGELOG.md)  
+- Upstream project: https://github.com/Oniric75/evsemasterudp  
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+## Acknowledgments
+
+- Protocol reverse engineering: [johnwoo-nl/emproto](https://github.com/johnwoo-nl/emproto)  
+- Original Home Assistant integration: [Oniric75/evsemasterudp](https://github.com/Oniric75/evsemasterudp)  
+- This fork — live hardware validation, discovery, Docker/UDP docs, and state-mapping work: [jbdelavoix](https://github.com/jbdelavoix)  
 
 ---
-
-## 👨‍💻 Development / Développement
 
 <details>
-<summary>🇺🇸 Developer Information / 🇫🇷 Informations pour les développeurs</summary>
+<summary>Developer notes</summary>
 
-### Project Structure / Structure du Projet
+### Layout
 
 ```
-evsemasterudp/
-├── __init__.py          # Integration entry point / Point d'entrée
-├── manifest.json        # Integration metadata / Métadonnées
-├── config_flow.py       # Configuration interface / Interface de config
-├── evse_client.py       # Main EVSE client / Client principal EVSE
-├── sensor.py           # Sensors / Capteurs
-├── button.py           # Start/Stop buttons / Boutons démarrer/arrêter
-├── number.py           # Number controls / Contrôles numériques
-├── protocol/           # Protocol implementation / Implémentation protocole
-│   ├── __init__.py
-│   ├── communicator.py # UDP communication / Communication UDP
-│   ├── datagram.py    # Datagram structure / Structure datagrammes
-│   └── datagrams.py   # Message types / Types de messages
-└── tests/             # Unit tests / Tests unitaires
-    ├── test_basic.py
-    ├── test_discovery.py
-    └── test_full.py
+custom_components/evsemasterudp/
+├── __init__.py
+├── manifest.json
+├── config_flow.py
+├── evse_client.py
+├── sensor.py / binary_sensor.py / button.py / number.py
+├── translations/   # en, fr, es, de, it, ja
+├── brand/          # icon.png + logo.png (HA / HACS)
+└── protocol/
+    ├── communicator.py
+    ├── datagram.py
+    └── datagrams.py
+tests/
+├── test_basic.py
+├── test_discovery.py
+└── test_full.py
 ```
 
-### EVSE Master UDP Protocol / Protocole UDP EVSE Master
+### Protocol
 
-- **Default port / Port par défaut** : 28376
-- **Communication** : Bidirectional UDP / UDP bidirectionnel
-- **Authentication / Authentification** : Plain text password / Mot de passe texte
-- **Discovery / Découverte** : Automatic broadcast / Broadcast automatique
+- Default port: **28376** UDP  
+- Discovery via broadcast; session kept with Heading / HeadingResponse  
+- Password sent in cleartext in the protocol (same as the official app); the setup form shows it in clear as well (factory default is often `123456`)
 
-#### Sequence Overview / Vue séquentielle
+### Release
 
-```mermaid
-sequenceDiagram
-  autonumber
-  participant HA as Home Assistant
-  participant Client as EVSEClient<br/>(evse_client.py)
-  participant Comm as Communicator.EVSE
-  participant EVSE as Charging Station
-
-  Note over HA,EVSE: Discovery & login / Découverte et connexion
-  HA->>Client: Trigger discovery
-  Client->>Comm: send(Login)
-  Comm->>EVSE: Datagram 0x0001 Login
-  EVSE-->>Comm: Datagram 0x0002 LoginResponse
-  Comm-->>Client: Station metadata
-
-  Client->>Comm: RequestLogin
-  Comm->>EVSE: Datagram 0x8002 RequestLogin
-  EVSE-->>Comm: PasswordErrorResponse?
-  alt Password ok / Mot de passe ok
-    Client->>Comm: LoginConfirm
-    Comm->>EVSE: Datagram 0x8001 LoginConfirm
-  else Password ko / Mot de passe refusé
-    Comm-->>Client: raise PasswordError
-  end
-
-  Note over HA,EVSE: Session heartbeat / Maintien de session
-  loop Keep alive
-    Client->>Comm: Heading
-    Comm->>EVSE: Datagram 0x0003 Heading
-    EVSE-->>Comm: Datagram 0x8003 HeadingResponse
-  end
-
-  Note over HA,EVSE: Status polling / Lecture statut
-  Client->>Comm: Request status
-  Comm->>EVSE: Datagram 0x8004 Ack status
-  EVSE-->>Comm: Datagram 0x0004 SingleACStatus
-  Comm-->>Client: Update EVSEState
-  Client-->>HA: Update entities
-
-  Note over HA,EVSE: Charge control / Commandes de charge
-  HA->>Client: Start charge
-  Client->>Comm: ChargeStart
-  Comm->>EVSE: Datagram 0x8007 ChargeStart
-  EVSE-->>Comm: Datagram 0x0007 ChargeStartResponse
-
-  HA->>Client: Stop charge
-  Client->>Comm: ChargeStop
-  Comm->>EVSE: Datagram 0x8008 ChargeStop
-  EVSE-->>Comm: Ack / Next status
-```
-
-### Development Testing / Tests de Développement
+1. Bump `custom_components/evsemasterudp/manifest.json` version (must match the tag)  
+2. Update `CHANGELOG.md` with a `## [X.Y.Z]` section  
+3. Push `main` — CI runs Hassfest + HACS validation  
+4. Tag and push (creates the GitHub Release via `.github/workflows/release.yml`) :
 
 ```bash
-# Activate virtual environment / Activer l'environnement virtuel
-.venv/Scripts/activate  # Windows
-source .venv/bin/activate  # Linux/Mac
-
-# Basic tests / Tests basiques
-python tests/test_basic.py
-
-# Discovery test / Test de découverte
-python tests/test_discovery.py
-
-# Full test with real station / Test complet avec vraie borne
-python tests/test_full.py
+git tag 3.1.0
+git push origin main
+git push origin 3.1.0
 ```
 
-### Development Requirements / Prérequis pour le Développement
-
-- Python 3.11+
-- Home Assistant Core 2024.1+
-- A compatible EVSE station on the local network / Une borne EVSE compatible sur le réseau local
-
-### Protocol Coverage / Couverture du Protocole
-
-This integration implements **75.7% of the TypeScript reference protocol** (30/37 commands):
-Cette intégration implémente **75,7% du protocole de référence TypeScript** (30/37 commandes) :
-
-#### ✅ Implemented Commands / Commandes Implémentées (30)
-- Authentication: Login sequence (0x8002, 0x0002, 0x0001)
-- Status monitoring: Various status commands (0x0003, 0x0004, 0x0005, 0x000d)
-- Control: Charging control (0x8104, 0x0104, 0x8105, 0x0105)
-- Configuration: Current, fees, system settings (0x8106-0x810d, 0x0106-0x010c)
-- Data transfer: Local charge records (0x000a, 0x800a)
-
-#### ❌ Not Implemented / Non Implémentées (7)
-- Interface configuration (0x810a, 0x010a, 0x810b, 0x010b)
-- Language settings (0x8109, 0x0109)
-- Nickname management (0x8108, 0x0108)
-- Temperature unit settings (0x810f, 0x010f)
-
-### Contributing / Contributions
-
-Contributions are welcome! / Les contributions sont les bienvenues !
-
-1. Fork the project / Fork le projet
-2. Create a feature branch / Créez une branche feature  
-   `git checkout -b feature/amazing-feature`
-3. Commit your changes / Committez vos changements  
-   `git commit -m 'Add amazing feature'`
-4. Push to the branch / Pushez vers la branche  
-   `git push origin feature/amazing-feature`
-5. Open a Pull Request / Ouvrez une Pull Request
-
-### Release Process / Processus de Release
-
-1. Update version in `manifest.json`
-2. Create annotated tag: `git tag -a vX.Y.Z -m "Release notes"`
-3. Push tag: `git push origin vX.Y.Z`
-4. Create GitHub release with changelog
-
-### Testing Guidelines / Directives de Test
-
-- Always test with real EVSE hardware when possible
-- Include protocol packet captures for new features
-- Test authentication edge cases
-- Verify Home Assistant compatibility with recent versions
+HACS picks up the new GitHub Release automatically for installed users.  
 
 </details>
-
----
-
-## 🙏 Acknowledgments / Remerciements
-
-This project is based on the original work of [johnwoo-nl/emproto](https://github.com/johnwoo-nl/emproto) and has been ported and extended for Home Assistant.
-
-Ce projet est basé sur le travail original de [johnwoo-nl/emproto](https://github.com/johnwoo-nl/emproto) et a été porté et étendu pour Home Assistant.

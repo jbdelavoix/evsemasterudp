@@ -57,8 +57,14 @@ class Datagram(ABC):
         
     # Device serial (8 bytes hex)
         if self.device_serial:
-            serial_bytes = bytes.fromhex(self.device_serial)
-            buffer[5:5+len(serial_bytes)] = serial_bytes
+            try:
+                serial_hex = self.device_serial.strip().lower().replace(":", "")
+                if len(serial_hex) % 2:
+                    serial_hex = "0" + serial_hex
+                serial_bytes = bytes.fromhex(serial_hex)[:8]
+                buffer[5:5+len(serial_bytes)] = serial_bytes
+            except ValueError as err:
+                raise ValueError(f"Invalid device serial (expected hex): {self.device_serial}") from err
         
     # Device password (6 bytes ASCII)
         if self.device_password is not None:

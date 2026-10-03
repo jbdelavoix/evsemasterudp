@@ -1,0 +1,42 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Descubrir cargadores EVSE",
+        "description": "**Pulse Enviar para iniciar una búsqueda automática** (~10 segundos en el puerto UDP **28376**).\n\n**Antes de continuar:**\n- Cierre la app **EVSEMaster** (entra en conflicto con esta integración)\n- El cargador y Home Assistant deben estar en la **misma LAN / VLAN**\n- **Docker:** Home Assistant necesita presencia en la LAN — `network_mode: host` **o** una IP LAN vía macvlan/ipvlan (p. ej. `home-lan` + `ipv4_address`). Bridge / mapear solo 28376 suele no bastar\n\nSi no se encuentra nada, podrá introducir el número de serie manualmente en la siguiente pantalla.",
+        "data": {
+          "start_discovery": "Iniciar búsqueda automática en la red (~10 s)"
+        }
+      },
+      "select": {
+        "title": "Seleccione su EVSE",
+        "description": "{count} cargador(es) encontrado(s) en la red. Seleccione uno e introduzca la contraseña de la aplicación EVSEMaster (valor de fábrica frecuente: **123456**).",
+        "data": {
+          "serial": "Cargador",
+          "password": "Contraseña (por defecto 123456)",
+          "name": "Nombre",
+          "port": "Puerto UDP"
+        }
+      },
+      "manual": {
+        "title": "Configuración manual",
+        "description": "No se encontró ningún cargador nuevo automáticamente (o se eligió la entrada manual).\n\nIntroduzca el número de serie y la contraseña de la aplicación EVSEMaster (a menudo **123456** por defecto). Active **Buscar de nuevo** para reintentar.\n\nSi el descubrimiento queda vacío: misma LAN, app cerrada, UDP 28376 abierto, y en Docker host networking o IP LAN (macvlan).",
+        "data": {
+          "serial": "Número de serie",
+          "password": "Contraseña (por defecto 123456)",
+          "name": "Nombre",
+          "port": "Puerto UDP",
+          "rediscover": "Buscar de nuevo en la red"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "No se puede contactar con el cargador. Compruebe alimentación, misma LAN, UDP 28376 y host networking / IP LAN Docker si aplica.",
+      "invalid_auth": "Contraseña incorrecta.",
+      "unknown": "Error inesperado."
+    },
+    "abort": {
+      "already_configured": "Este cargador ya está configurado."
+    }
+  }
+}

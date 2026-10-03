@@ -1,72 +1,79 @@
 #!/usr/bin/env python3
-"""
-Test de découverte automatique EVSE
-"""
+"""Discover EVSE chargers via UDP broadcast (port 28376)."""
 
+from __future__ import annotations
+
+import argparse
 import asyncio
-import sys
 import os
+import select as _stdlib_select
+import sys
 
-# Ajouter le path vers le protocole dans custom_components
-# Utilise le chemin relatif depuis ce fichier
+# Pin stdlib select before adding the integration path (HA platform select.py).
+sys.modules["select"] = _stdlib_select
+
 test_dir = os.path.dirname(__file__)
 project_root = os.path.dirname(test_dir)
-evse_module_path = os.path.join(project_root, 'custom_components', 'evsemasterudp')
+evse_module_path = os.path.join(project_root, "custom_components", "evsemasterudp")
 sys.path.insert(0, evse_module_path)
 
-async def test_discovery():
-    """Test découverte automatique"""
+
+async def run_discovery(timeout: float) -> int:
+    from protocol.communicator import Communicator
+
+    print(f"Listening for EVSE broadcasts on UDP 28376 (timeout={timeout:.0f}s)...")
+    print("Close the EVSE Master app first if discovery stays empty.")
+    print()
+
+    communicator = Communicator()
+    port = await communicator.start()
+    print(f"Local UDP port: {port}")
+    print()
+
+    seen: set[str] = set()
+    deadline = asyncio.get_event_loop().time() + timeout
+
     try:
-        from protocol.communicator import Communicator
-        
-        print("🔍 Démarrage découverte EVSE...")
-        comm = Communicator()
-        port = await comm.start()
-        print(f"   ✅ Écoute sur port {port}")
-        
-        print("⏳ Attente de broadcasts EVSE (15s)...")
-        
-        # Attendre que des EVSE soient découvertes
-        for i in range(15):
-            await asyncio.sleep(1.0)
-            
-            if comm.evses:
-                print(f"\n🎉 EVSE découvertes: {len(comm.evses)}")
-                for serial, evse in comm.evses.items():
-                    print(f"   📱 {serial} @ {evse.info.ip}:{evse.info.port}")
-                    print(f"      🏷️ Brand: {getattr(evse.info, 'brand', 'N/A')}")
-                    print(f"      🏷️ Model: {getattr(evse.info, 'model', 'N/A')}")
+        while asyncio.get_event_loop().time() < deadline:
+            remaining = deadline - asyncio.get_event_loop().time()
+            if remaining <= 0:
                 break
-            else:
-                print(f"   ⏳ {i+1}/15s - Aucun EVSE trouvé...")
-        
-        if not comm.evses:
-            print("   ❌ Aucun EVSE découvert")
-        
-        print("\n🛑 Arrêt du communicateur...")
-        await comm.stop()
-        print("   ✅ Arrêté")
-        
-        return len(comm.evses) > 0
-        
-    except Exception as e:
-        print(f"❌ Erreur: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+            await asyncio.sleep(min(1.0, remaining))
+
+            for device_id, info in list(communicator.discovered_devices.items()):
+                if device_id in seen:
+                    continue
+                seen.add(device_id)
+                print(f"IP        : {info.get('ip')}")
+                print(f"Port      : {info.get('port')}")
+                print(f"Serial    : {device_id}")
+                print(f"Brand     : {info.get('brand')}")
+                print(f"Model     : {info.get('model')}")
+                print(f"Type      : {info.get('type')}")
+                print()
+    finally:
+        await communicator.stop()
+
+    if not seen:
+        print("No EVSE discovered.")
+        print("Tips: same LAN/VLAN as the charger, UDP 28376 not blocked, EVSE Master app closed.")
+        return 1
+
+    print(f"Discovered {len(seen)} device(s).")
+    return 0
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Discover EVSE chargers via UDP broadcast")
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=15.0,
+        help="Seconds to listen for broadcasts (default: 15)",
+    )
+    args = parser.parse_args()
+    raise SystemExit(asyncio.run(run_discovery(args.timeout)))
+
 
 if __name__ == "__main__":
-    print("🔍 Test de découverte automatique EVSE")
-    print("📡 Ce test écoute les broadcasts de découverte sur le réseau")
-    print("🔌 Assurez-vous que votre EVSE est connectée et allumée\n")
-    
-    success = asyncio.run(test_discovery())
-    
-    if success:
-        print("\n🎉 Découverte réussie ! L'EVSE a été détectée automatiquement.")
-    else:
-        print("\n⚠️ Aucun EVSE découvert automatiquement.")
-        print("   Vérifiez que:")
-        print("   • L'EVSE est sur le même réseau (192.168.42.x)")
-        print("   • Le port UDP 28376 n'est pas bloqué") 
-        print("   • L'EVSE envoie bien des broadcasts")
+    main()

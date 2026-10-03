@@ -1,0 +1,42 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Scopri i caricatori EVSE",
+        "description": "**Premi Invia per avviare una ricerca automatica** (~10 secondi sulla porta UDP **28376**).\n\n**Prima di continuare:**\n- Chiudi l'app **EVSEMaster** (va in conflitto con questa integrazione)\n- Caricatore e Home Assistant devono essere sulla **stessa LAN / VLAN**\n- **Docker:** Home Assistant deve essere sulla LAN — `network_mode: host` **oppure** un IP LAN via macvlan/ipvlan (es. `home-lan` + `ipv4_address`). Bridge / mappare solo 28376 di solito non basta\n\nSe non viene trovato nulla, potrai inserire il seriale manualmente nella schermata successiva.",
+        "data": {
+          "start_discovery": "Avvia ricerca automatica sulla rete (~10 s)"
+        }
+      },
+      "select": {
+        "title": "Seleziona il tuo EVSE",
+        "description": "{count} caricatore/i trovato/i sulla rete. Selezionane uno e inserisci la password dell'app EVSEMaster (default di fabbrica frequente: **123456**).",
+        "data": {
+          "serial": "Caricatore",
+          "password": "Password (default 123456)",
+          "name": "Nome",
+          "port": "Porta UDP"
+        }
+      },
+      "manual": {
+        "title": "Configurazione manuale",
+        "description": "Nessun nuovo caricatore trovato automaticamente (o è stata scelta l'inserimento manuale).\n\nInserisci il numero di serie e la password dell'app EVSEMaster (spesso **123456** di default). Attiva **Cerca di nuovo** per ripetere il rilevamento.\n\nSe resta vuoto: stessa LAN, app chiusa, UDP 28376 aperto, e in Docker host networking o IP LAN (macvlan).",
+        "data": {
+          "serial": "Numero di serie",
+          "password": "Password (default 123456)",
+          "name": "Nome",
+          "port": "Porta UDP",
+          "rediscover": "Cerca di nuovo sulla rete"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Impossibile raggiungere il caricatore. Verifica alimentazione, stessa LAN, UDP 28376 e host networking / IP LAN Docker se serve.",
+      "invalid_auth": "Password errata.",
+      "unknown": "Errore imprevisto."
+    },
+    "abort": {
+      "already_configured": "Questo caricatore è già configurato."
+    }
+  }
+}
