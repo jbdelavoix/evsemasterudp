@@ -1011,11 +1011,15 @@ class SetAndGetChargeScheduleResponse(Datagram):
 
         self.action = 0
         self.slots = empty_schedule()
+        # True only when the charger sent a full week. A short or empty
+        # payload still unpacks as seven off slots and must not count as a read.
+        self.complete = False
 
     def pack_payload(self) -> bytes:
         return b""
 
     def unpack_payload(self, buffer: bytes) -> None:
-        from .schedule import unpack_schedule_payload
+        from .schedule import PAYLOAD_LEN, unpack_schedule_payload
 
         self.action, self.slots = unpack_schedule_payload(buffer)
+        self.complete = len(buffer) >= PAYLOAD_LEN

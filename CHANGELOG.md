@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [3.1.1] - 2026-10-24
+
+### Fixed
+- Weekly schedule controls no longer write the all-off default when the charger has not answered a schedule read. Those entities stay unavailable until a read succeeds, and a one-day change re-reads the week before writing.
+
+### Changed
+- Installation docs lead with HACS search; adding a custom repository is the fallback.
+
 ## [3.1.0] - 2026-10-02
 
 ### Added

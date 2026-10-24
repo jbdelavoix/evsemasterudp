@@ -68,7 +68,10 @@ class EVSEConfig:
         self.max_electricity = 6
         self.temperature_unit = 1
         self.brightness = 100
+        # Placeholder only. schedule_known stays false until a full 0x010e
+        # payload arrives — this all-off list must never be written back.
         self.schedule: List[ScheduleSlot] = empty_schedule()
+        self.schedule_known: bool = False
 
 class EVSEState:
     """Electrical state of an EVSE"""
@@ -128,6 +131,8 @@ class EVSE:
         self.password: Optional[str] = None
         self._logged_in = False
         self._response_waiters: List[tuple] = []  # (set[command], Future)
+        self._schedule_lock = asyncio.Lock()
+        self._schedule_retry_after: Optional[datetime] = None
         
         # Possible states according to the protocol
         self.GUN_STATES = {
@@ -364,12 +369,20 @@ class EVSE:
         if nick and getattr(nick, "nick_name", None):
             self.config.name = nick.nick_name
 
-        schedule = await _get(
-            SetAndGetChargeSchedule, SetAndGetChargeScheduleResponse.COMMAND
-        )
-        if schedule and getattr(schedule, "slots", None):
-            self.config.schedule = list(schedule.slots)
-    
+        # The schedule GET sits at the end of this chain and is the one the
+        # charger most often drops. Retry here; the periodic loop retries later.
+        loaded = False
+        for _attempt in range(3):
+            if await self.get_schedule():
+                loaded = True
+                break
+        if not loaded and not self.config.schedule_known:
+            self._schedule_retry_after = datetime.now() + timedelta(seconds=60)
+            _LOGGER.warning(
+                f"Weekly schedule not read from {self.info.serial}; "
+                "schedule controls stay unavailable until a read succeeds"
+            )
+
     async def charge_start(self, max_amps: int = 6, single_phase: bool = False, 
                           user_id: str = "", charge_id: str = "") -> bool:
         """Start charging"""
@@ -566,8 +579,27 @@ class EVSE:
             _LOGGER.error(f"Error setting name on {self.info.serial}: {e}")
             return False
 
-    async def get_schedule(self) -> Optional[List[ScheduleSlot]]:
-        """Fetch weekly charge schedule (7 day slots)."""
+    def _accept_schedule_from_device(self, response) -> bool:
+        """Store slots only when the charger sent a full 7-day payload.
+
+        A missing or truncated ``0x010e`` still unpacks as seven off days.
+        Treating that as a successful read is what lets a later one-day edit
+        erase the week configured in the EVSEMaster app.
+        """
+        from .schedule import SLOT_COUNT
+
+        if response is None or not getattr(response, "complete", False):
+            return False
+        slots = getattr(response, "slots", None)
+        if not slots or len(slots) < SLOT_COUNT:
+            return False
+        self.config.schedule = list(slots[:SLOT_COUNT])
+        self.config.schedule_known = True
+        self._schedule_retry_after = None
+        return True
+
+    async def _read_schedule(self, timeout: float = 5.0) -> Optional[List[ScheduleSlot]]:
+        """GET 0x810e. Caller must hold ``_schedule_lock``."""
         if not self.is_logged_in():
             _LOGGER.error(f"EVSE {self.info.serial} not connected")
             return None
@@ -578,19 +610,26 @@ class EVSE:
             req.action = 2
             await self.send_datagram(req)
             response = await self._wait_for_response(
-                [SetAndGetChargeScheduleResponse.COMMAND], 5.0
+                [SetAndGetChargeScheduleResponse.COMMAND], timeout
             )
-            if not response or not getattr(response, "slots", None):
+            if not self._accept_schedule_from_device(response):
+                _LOGGER.debug(f"No complete schedule from {self.info.serial}")
                 return None
-            self.config.schedule = list(response.slots)
-            await self.communicator._notify_callbacks("evse_changed", self)
-            return self.config.schedule
+            return list(self.config.schedule)
         except Exception as e:
             _LOGGER.error(f"Error getting schedule on {self.info.serial}: {e}")
             return None
 
-    async def set_schedule(self, slots: List[ScheduleSlot]) -> bool:
-        """Set weekly charge schedule (must send all 7 day slots)."""
+    async def get_schedule(self, timeout: float = 5.0) -> Optional[List[ScheduleSlot]]:
+        """Fetch weekly charge schedule (7 day slots)."""
+        async with self._schedule_lock:
+            slots = await self._read_schedule(timeout=timeout)
+        if slots is not None:
+            await self.communicator._notify_callbacks("evse_changed", self)
+        return slots
+
+    async def _write_schedule(self, slots: List[ScheduleSlot]) -> bool:
+        """SET 0x810e with exactly 7 slots. Caller must hold ``_schedule_lock``."""
         if not self.is_logged_in():
             _LOGGER.error(f"EVSE {self.info.serial} not connected")
             return False
@@ -612,15 +651,28 @@ class EVSE:
             if not response:
                 _LOGGER.error(f"No response setting schedule on {self.info.serial}")
                 return False
-            if getattr(response, "slots", None):
-                self.config.schedule = list(response.slots)
-            else:
-                self.config.schedule = padded
-            await self.communicator._notify_callbacks("evse_changed", self)
+            if not self._accept_schedule_from_device(response):
+                # The charger answered without a full week. Keep what we sent
+                # only when a previous read already made this schedule real.
+                if self.config.schedule_known:
+                    self.config.schedule = padded
             return True
         except Exception as e:
             _LOGGER.error(f"Error setting schedule on {self.info.serial}: {e}")
             return False
+
+    async def set_schedule(self, slots: List[ScheduleSlot]) -> bool:
+        """Replace the whole weekly schedule with the 7 slots given.
+
+        Single-day edits must use ``set_schedule_slot``. This method writes
+        the caller's list as-is (missing days are sent off) and is the path
+        used by an explicit full-week update.
+        """
+        async with self._schedule_lock:
+            ok = await self._write_schedule(slots)
+        if ok:
+            await self.communicator._notify_callbacks("evse_changed", self)
+        return ok
 
     async def set_schedule_slot(
         self,
@@ -631,32 +683,51 @@ class EVSE:
         duration_min: Optional[int] = None,
         enabled: Optional[bool] = None,
     ) -> bool:
-        """Update one weekday slot and write the full weekly schedule."""
+        """Update one weekday slot and write the full weekly schedule.
+
+        Refuses the write until the charger has returned a complete schedule,
+        and reads that schedule again immediately before merging.
+        """
         from .schedule import SLOT_COUNT
 
         if day_index < 0 or day_index >= SLOT_COUNT:
             return False
-        slots = list(self.config.schedule or empty_schedule())
-        while len(slots) < SLOT_COUNT:
-            slots.append(ScheduleSlot.disabled())
-        current = slots[day_index]
+        if not self.is_logged_in():
+            _LOGGER.error(f"EVSE {self.info.serial} not connected")
+            return False
 
-        if enabled is False:
-            slots[day_index] = ScheduleSlot.disabled()
-        else:
-            from .schedule import MAX_DURATION_MIN, ScheduleSlot as Slot
+        async with self._schedule_lock:
+            fresh = await self._read_schedule()
+            if not fresh:
+                _LOGGER.error(
+                    f"Refusing schedule write on {self.info.serial}: "
+                    "could not read the weekly schedule from the charger"
+                )
+                return False
+            slots = list(fresh)
+            while len(slots) < SLOT_COUNT:
+                slots.append(ScheduleSlot.disabled())
+            current = slots[day_index]
 
-            h = current.hour if hour is None else max(0, min(23, int(hour)))
-            m = current.minute if minute is None else max(0, min(59, int(minute)))
-            if duration_min is None:
-                dur = current.duration_min if current.enabled else 60
-            else:
-                dur = max(0, min(MAX_DURATION_MIN, int(duration_min)))
-            if dur <= 0:
+            if enabled is False:
                 slots[day_index] = ScheduleSlot.disabled()
             else:
-                slots[day_index] = Slot.active(h, m, dur)
-        return await self.set_schedule(slots)
+                from .schedule import MAX_DURATION_MIN, ScheduleSlot as Slot
+
+                h = current.hour if hour is None else max(0, min(23, int(hour)))
+                m = current.minute if minute is None else max(0, min(59, int(minute)))
+                if duration_min is None:
+                    dur = current.duration_min if current.enabled else 60
+                else:
+                    dur = max(0, min(MAX_DURATION_MIN, int(duration_min)))
+                if dur <= 0:
+                    slots[day_index] = ScheduleSlot.disabled()
+                else:
+                    slots[day_index] = Slot.active(h, m, dur)
+            ok = await self._write_schedule(slots)
+        if ok:
+            await self.communicator._notify_callbacks("evse_changed", self)
+        return ok
     
     async def sync_time(self) -> bool:
         """Synchronize EVSE clock so its Shanghai wall clock matches local time."""
@@ -855,8 +926,7 @@ class Communicator:
                 evse.config.name = datagram.nick_name
                 await self._notify_callbacks("evse_changed", evse)
         elif isinstance(datagram, SetAndGetChargeScheduleResponse):
-            if getattr(datagram, "slots", None):
-                evse.config.schedule = list(datagram.slots)
+            if evse._accept_schedule_from_device(datagram):
                 await self._notify_callbacks("evse_changed", evse)
         elif isinstance(datagram, PasswordErrorResponse):
             _LOGGER.warning(
@@ -1084,6 +1154,24 @@ class Communicator:
                         await evse.send_keepalive()
                     except Exception as e:
                         _LOGGER.debug(f"Keepalive failed for {evse.info.serial}: {e}")
+
+                    # A missed post-login GET must not leave the all-off
+                    # placeholder in place for the rest of the session.
+                    if evse.is_logged_in() and not evse.config.schedule_known:
+                        retry_at = evse._schedule_retry_after
+                        if retry_at is None or datetime.now() >= retry_at:
+                            try:
+                                if not await evse.get_schedule(timeout=3.0):
+                                    evse._schedule_retry_after = (
+                                        datetime.now() + timedelta(seconds=60)
+                                    )
+                            except Exception as e:
+                                _LOGGER.debug(
+                                    f"Schedule read retry failed for {evse.info.serial}: {e}"
+                                )
+                                evse._schedule_retry_after = (
+                                    datetime.now() + timedelta(seconds=60)
+                                )
 
                     # Logged in but no SingleACStatus for 2 min (incl. never) → reclaim.
                     # Heading acks alone must not keep a frozen electrical state forever.

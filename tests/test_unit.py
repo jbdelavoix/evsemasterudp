@@ -278,10 +278,17 @@ class TestChargeSchedule(unittest.TestCase):
 
         resp = SetAndGetChargeScheduleResponse()
         resp.unpack_payload(payload)
+        self.assertTrue(resp.complete)
         as_dict = schedule_to_dict(resp.slots)
         self.assertEqual(as_dict["monday"]["hour"], 23)
         self.assertEqual(as_dict["monday"]["duration_min"], 1378)
         self.assertFalse(as_dict["tuesday"]["enabled"])
+
+    def test_short_payload_is_not_a_complete_read(self):
+        resp = SetAndGetChargeScheduleResponse()
+        resp.unpack_payload(bytes([2]))
+        self.assertFalse(resp.complete)
+        self.assertFalse(any(slot.enabled for slot in resp.slots))
 
 
 class TestSystemTime(unittest.TestCase):
@@ -448,6 +455,171 @@ class TestAddressTrust(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(evse.info.ip, "192.168.20.97")
         self.assertEqual(evse.info.port, 39576)
         self.assertEqual(evse.config.brightness, 100)
+
+
+def _schedule_response(slots, action=2):
+    resp = SetAndGetChargeScheduleResponse()
+    resp.set_device_serial(SERIAL)
+    resp.unpack_payload(pack_schedule_payload(action, slots))
+    return resp
+
+
+class TestScheduleWriteGuard(unittest.IsolatedAsyncioTestCase):
+    """A missed 0x810e GET must not be written back as seven off days."""
+
+    def setUp(self):
+        from datetime import datetime
+
+        self.comm = Communicator(port=0)
+        self.evse = EVSE(self.comm, SERIAL, "192.168.20.97", 28376)
+        self.evse.password = PASSWORD
+        self.evse._logged_in = True
+        self.evse.last_seen = datetime.now()
+        self.sent = []
+
+        async def send(datagram, evse):
+            self.sent.append(datagram)
+            return 0
+
+        self.comm.send = send
+
+    def _actions(self):
+        return [getattr(datagram, "action", None) for datagram in self.sent]
+
+    async def test_slot_write_refused_until_read_succeeds(self):
+        async def no_response(commands, timeout):
+            return None
+
+        self.evse._wait_for_response = no_response
+        ok = await self.evse.set_schedule_slot(
+            0, hour=1, minute=0, duration_min=30, enabled=True
+        )
+        self.assertFalse(ok)
+        self.assertFalse(self.evse.config.schedule_known)
+        self.assertNotIn(1, self._actions())
+        self.assertEqual(self._actions(), [2])
+
+    async def test_failed_reread_does_not_write_cached_schedule(self):
+        async def no_response(commands, timeout):
+            return None
+
+        self.evse._wait_for_response = no_response
+        self.evse.config.schedule_known = True
+        self.evse.config.schedule[1] = ScheduleSlot.active(23, 59, 1378)
+        ok = await self.evse.set_schedule_slot(
+            0, hour=1, minute=15, enabled=True
+        )
+        self.assertFalse(ok)
+        self.assertNotIn(1, self._actions())
+        self.assertEqual(self.evse.config.schedule[1].duration_min, 1378)
+
+    async def test_slot_write_rereads_and_keeps_other_days(self):
+        device = empty_schedule()
+        device[1] = ScheduleSlot.active(23, 59, 22 * 60 + 58)
+        device[3] = ScheduleSlot.active(6, 30, 90)
+
+        async def wait(commands, timeout):
+            req = self.sent[-1]
+            if req.action == 2:
+                return _schedule_response(device, action=2)
+            if req.action == 1:
+                return _schedule_response(req.slots, action=1)
+            return None
+
+        self.evse._wait_for_response = wait
+        ok = await self.evse.set_schedule_slot(
+            0, hour=1, minute=15, duration_min=30, enabled=True
+        )
+        self.assertTrue(ok)
+        self.assertEqual(self._actions(), [2, 1])
+        written = self.sent[1].slots
+        self.assertEqual(
+            (written[0].hour, written[0].minute, written[0].duration_min),
+            (1, 15, 30),
+        )
+        self.assertEqual(written[1].pack(), device[1].pack())
+        self.assertFalse(written[2].enabled)
+        self.assertEqual(written[3].pack(), device[3].pack())
+        self.assertFalse(written[4].enabled)
+        self.assertTrue(self.evse.config.schedule_known)
+
+    async def test_all_off_read_is_real_and_only_edits_one_day(self):
+        device = empty_schedule()
+
+        async def wait(commands, timeout):
+            req = self.sent[-1]
+            if req.action == 2:
+                return _schedule_response(device, action=2)
+            return _schedule_response(req.slots, action=1)
+
+        self.evse._wait_for_response = wait
+        ok = await self.evse.set_schedule_slot(
+            0, hour=3, minute=0, duration_min=60, enabled=True
+        )
+        self.assertTrue(ok)
+        written = self.sent[1].slots
+        self.assertTrue(written[0].enabled)
+        self.assertTrue(all(not slot.enabled for slot in written[1:]))
+
+    async def test_short_response_does_not_unlock_writes(self):
+        async def wait(commands, timeout):
+            resp = SetAndGetChargeScheduleResponse()
+            resp.unpack_payload(bytes([2]))
+            return resp
+
+        self.evse._wait_for_response = wait
+        ok = await self.evse.set_schedule_slot(2, duration_min=45, enabled=True)
+        self.assertFalse(ok)
+        self.assertFalse(self.evse.config.schedule_known)
+        self.assertEqual(self._actions(), [2])
+
+    async def test_explicit_full_week_write_still_sends(self):
+        slots = empty_schedule()
+        slots[0] = ScheduleSlot.active(3, 0, 60)
+
+        async def wait(commands, timeout):
+            return _schedule_response(self.sent[-1].slots, action=1)
+
+        self.evse._wait_for_response = wait
+        ok = await self.evse.set_schedule(slots)
+        self.assertTrue(ok)
+        self.assertEqual(self._actions(), [1])
+        self.assertTrue(self.evse.config.schedule_known)
+        self.assertEqual(self.evse.config.schedule[0].hour, 3)
+        self.assertFalse(self.evse.config.schedule[1].enabled)
+
+    async def test_fetch_retries_schedule_and_stays_unknown_when_silent(self):
+        async def no_response(commands, timeout):
+            return None
+
+        self.evse._wait_for_response = no_response
+        await self.evse._fetch_device_info()
+        self.assertFalse(self.evse.config.schedule_known)
+        schedule_gets = [
+            datagram
+            for datagram in self.sent
+            if isinstance(datagram, SetAndGetChargeSchedule) and datagram.action == 2
+        ]
+        self.assertEqual(len(schedule_gets), 3)
+        self.assertFalse(any(slot.enabled for slot in self.evse.config.schedule))
+
+    async def test_incoming_complete_schedule_marks_known(self):
+        device = empty_schedule()
+        device[5] = ScheduleSlot.active(22, 0, 120)
+        self.comm.evses[SERIAL] = self.evse
+        resp = _schedule_response(device, action=2)
+        await self.comm._process_datagram(resp, ("192.168.20.97", 28376))
+        self.assertTrue(self.evse.config.schedule_known)
+        self.assertEqual(self.evse.config.schedule[5].duration_min, 120)
+        self.assertFalse(self.evse.config.schedule[0].enabled)
+
+    async def test_incoming_short_schedule_is_ignored(self):
+        self.comm.evses[SERIAL] = self.evse
+        resp = SetAndGetChargeScheduleResponse()
+        resp.set_device_serial(SERIAL)
+        resp.unpack_payload(bytes([2]))
+        await self.comm._process_datagram(resp, ("192.168.20.97", 28376))
+        self.assertFalse(self.evse.config.schedule_known)
 
 
 class TestCaptureSamples(unittest.TestCase):

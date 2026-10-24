@@ -5,6 +5,7 @@ from homeassistant.components.number import NumberEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfElectricCurrent, UnitOfTime
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -201,6 +202,8 @@ class EVSEScheduleDuration(CoordinatorEntity, NumberEntity):
 
     @property
     def native_value(self) -> float | None:
+        if not self.evse_data.get("schedule_known"):
+            return None
         slot = self._slot
         if not slot or not slot.get("enabled"):
             return 0.0
@@ -210,7 +213,11 @@ class EVSEScheduleDuration(CoordinatorEntity, NumberEntity):
     @property
     def available(self) -> bool:
         data = self.evse_data
-        return data.get("online", False) and data.get("logged_in", False)
+        return (
+            data.get("online", False)
+            and data.get("logged_in", False)
+            and data.get("schedule_known", False)
+        )
 
     async def async_set_native_value(self, value: float) -> None:
         duration = int(value)
@@ -222,5 +229,6 @@ class EVSEScheduleDuration(CoordinatorEntity, NumberEntity):
             ok = await self.client.set_schedule_slot(
                 self.serial, self.day_index, duration_min=duration, enabled=True
             )
-        if ok:
-            await self.coordinator.async_request_refresh()
+        if not ok:
+            raise HomeAssistantError("The charger schedule was not changed")
+        await self.coordinator.async_request_refresh()

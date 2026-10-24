@@ -112,6 +112,10 @@ Also allow **UDP 28376** inbound/outbound on the host firewall.
 
 ### HACS (recommended)
 
+In HACS → **Integrations**, search for **EVSE Master UDP**, install it, then restart Home Assistant.
+
+If it does not appear in search, add the repository yourself:
+
 1. HACS → Integrations → Custom repositories  
 2. URL: `https://github.com/jbdelavoix/evsemasterudp` — type **Integration**  
 3. Install **EVSE Master UDP**  
@@ -249,13 +253,13 @@ Names below use the friendly name chosen at setup (default **EVSEMaster**). Enti
 | Max Current | A | Configurable charge current limit (6 A … charger max) |
 | Screen Brightness | % | Display brightness `0–100` (protocol `0x8162`) |
 | Fast Change Protection | min | Cooldown after a stop before the next start is allowed (`0` = off) |
-| Schedule *Day* Duration | min | Weekly window length (`0` = off, up to `1439` = 23h59). Protocol `0x810e` |
+| Schedule *Day* Duration | min | Weekly window length (`0` = off, up to `1439` = 23h59). Unavailable until the charger has returned its schedule. Protocol `0x810e` |
 
 ### Times
 
 | Entity | Notes |
 |--------|--------|
-| Schedule *Day* Start | Weekly charge window start (Mon–Sun). Empty / unavailable when the day slot is off |
+| Schedule *Day* Start | Weekly charge window start (Mon–Sun). Unavailable until the charger schedule has been read; empty when that day is off |
 
 ### Selects
 

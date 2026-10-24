@@ -6,6 +6,7 @@ from typing import Optional, Dict, Any, Callable
 from datetime import datetime, timedelta
 
 from .protocol import get_communicator
+from .protocol.schedule import WEEKDAYS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -77,21 +78,17 @@ class EVSEClient:
             "language": evse.config.language,
             "offline_charge": evse.config.offline_charge,
             "brightness": evse.config.brightness,
-            "schedule": {
-                day: slot.to_dict()
-                for day, slot in zip(
-                    (
-                        "monday",
-                        "tuesday",
-                        "wednesday",
-                        "thursday",
-                        "friday",
-                        "saturday",
-                        "sunday",
-                    ),
-                    evse.config.schedule or [],
-                )
-            },
+            # Hide the all-off placeholder until a charger read has succeeded.
+            "schedule_known": bool(evse.config.schedule_known),
+            "schedule": (
+                {
+                    day: evse.config.schedule[i].to_dict()
+                    for i, day in enumerate(WEEKDAYS)
+                    if i < len(evse.config.schedule)
+                }
+                if evse.config.schedule_known
+                else {}
+            ),
             # Lifetime energy counter (for TOTAL_INCREASING sensor)
             "total_kwh": 0.0,
             "charge_kwh": 0.0,
